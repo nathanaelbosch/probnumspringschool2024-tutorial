@@ -26,6 +26,12 @@ using Optim
 # ╔═╡ 5a3b056e-27fd-4828-a573-9a1e95a546eb
 using PlutoUI,  PlutoTeachingTools
 
+# ╔═╡ dc3a7c1b-512c-49c4-a96d-838556e1d9c2
+md"""# To get started:
+1. Install julia and pluto.jl following [https://plutojl.org](https://plutojl.org)
+2. Get the notebook from [https://github.com/nathanaelbosch/probnumspringschool2024-tutorial](https://github.com/nathanaelbosch/probnumspringschool2024-tutorial)
+"""
+
 # ╔═╡ e58eea83-277b-40c7-ac9d-5f3300e59ffe
 md"""
 # Practical Session: Probabilistic Numerics for ODEs
@@ -54,7 +60,7 @@ md"### Basic Julia"
 md"We can define variables as usual"
 
 # ╔═╡ 5b24cacf-921b-4b73-b6f5-355fdf9f8adb
-variablename = 1
+variablename = 1000
 
 # ╔═╡ 11204fa2-4594-4244-a9ac-b600450014e6
 md"In comparison to Jupyter notebooks, Pluto.jl prints the output _above_ the code cell."
@@ -84,10 +90,10 @@ matrix * vector
 md"But we can also broadcast operations to get a numpy-like behaviour of `*`:"
 
 # ╔═╡ 72430f2d-55d2-4c65-bc99-f808fb153451
-2 .* vector
+2 * vector
 
 # ╔═╡ e41d5a46-48ef-4891-87f9-b6909ebbdbe1
-vector .* matrix
+vector' * matrix
 
 # ╔═╡ 0c5021ff-7bef-4863-90c5-55a507451299
 md"`'` transposes (or actually computes the adjoint, but with real numbers it's the same):"
@@ -115,11 +121,13 @@ md"Defining functions:"
 
 # ╔═╡ e11629dc-1bf3-4dbe-977b-b8ca567dc6df
 function myfunction(arg1, arg2=2; kwarg1, kwarg2=4)
+	
 	return arg1+arg2+kwarg1+kwarg2
+
 end
 
 # ╔═╡ 51dd874e-8a3e-4eed-97f2-148ad5a82efe
-myfunction(1, 10; kwarg1=1)
+myfunction(1, 1; kwarg1=1)
 
 # ╔═╡ 25023dba-be97-4cfb-a880-2be8c6e3330d
 md"`LinearAlgebra.jl` exports some handy linear algebra things, like identity matrices or symmetric matrices, Kronecker products, and more:"
@@ -143,8 +151,10 @@ md"The cool part: Pluto is completely reactive! Try changing the definition of `
 md"The somewhat inconvenent part: Pluto cells always contain a single expression, so you can't just write multiple lines into a cell. So the following doesn't work:"
 
 # ╔═╡ 233cc2c2-cf5d-472f-a690-76cd7b5c4e12
-variable1 = 1
-variable2 = 2
+begin
+	variable1 = 1
+	variable2 = 2
+end
 
 # ╔═╡ 365dfbf2-9288-49ab-b702-da010b078d47
 md"But Pluto tells you how to fix this: Either split the cell into two cells (after which each cell contains only a single expression), or wrap the code into a `begin ... end` block to effectively turn it into one expression. Try it out!"
@@ -166,7 +176,7 @@ md"### Plotting in Julia with Plots.jl"
 
 # ╔═╡ d8551bc9-6139-42f5-ab2c-95ad47163a50
 begin
-	x = 1:10
+	x = range(1, 10)
 	y = rand(10, 2)
 
 	plot(x, y, xlabel="x", ylabel="y(x)", label=["y1" "y2"])
@@ -222,12 +232,14 @@ md"""
 function f(y, p, t)
     S, I, R, D = y
     beta, gamma, eta = p
-    dy = [
+    
+	dy = [
 		-beta * S * I,
     	beta * S * I - gamma * I - eta * I,
         gamma * I,
         eta * I,
 	]
+	
 	return dy
 end
 
@@ -264,6 +276,13 @@ function forward_euler(f, y0, ts; p=p)
     ys = [y0] # output: A list of y values
 
 	# TODO
+	yk = y0
+	for k in range(1, length(ts)-1)
+		dt = ts[k+1] - ts[k]
+		yk = yk + dt * f(yk, p, ts[k])
+
+		push!(ys, yk)
+	end
 	
     return ys
 end
@@ -456,7 +475,7 @@ and we assume $m_0 = 0$ and $C_0 = I$.
 m0 = zeros(d * (q + 1))
 
 # ╔═╡ 8e6cec5d-6c5f-4011-a79f-964b21368972
-C0 = 1.0 * I(d * (q+1)) |> Matrix
+C0 = Matrix(1.0 * I(d * (q+1)))
 
 # ╔═╡ 73817e2a-ad4b-49c8-852c-3f75d76dbdcb
 sampling_link = "#" * (PlutoRunner.currently_running_cell_id[] |> string); md"""
@@ -476,11 +495,22 @@ with $m_0, C_0, A(h), Q(h)$ as given above.
     Implement the sampling function `sample_prior` below.
 """
 
+# ╔═╡ d403bef1-bce5-4cfc-8ac0-52996010ad2f
+
+
 # ╔═╡ fbdf49b8-0d36-4d9d-8e13-e8fed2f86171
-function sample_prior(m0, C0, ts, A, Q)
-    sample = [m0 + cholesky(C0).L * randn(d*(q+1))]
-    
-    return sample
+function sample_prior(m0, C0, ts::AbstractVector{Float64}, A, Q)::Vector{Vector{Float64}}
+	Yt = m0 + cholesky(C0).L * randn(d*(q+1))
+    sample = [Yt]
+	
+	for i in 2:length(ts)
+		h = ts[i] - ts[i-1]
+		Yt = A(h) * Yt + cholesky(Q(h)).L * randn(d*(q+1))
+
+		push!(sample, Yt)
+	end
+	
+	return sample
 end
 
 # ╔═╡ 0331404c-b18d-4ea7-b948-9d7138c6d2f8
@@ -579,7 +609,11 @@ In Kalman filtering, this is also known as the "predict" step.
 
 # ╔═╡ 4d7e17e4-4610-4ad1-8e2c-fad89dfa0e3c
 function marginalize_gaussian(m, P, A, b, C)
-    return missing
+
+	ymean = A*m + b
+	ycov = A*P*A' + C
+	
+    return ymean, ycov
 end
 
 # ╔═╡ 6ed274e4-dbc0-4629-a0d3-3d838876cb35
@@ -614,6 +648,15 @@ function compute_marginals(m0, C0, ts, A, Q)
 	Cs = [C0]
 
 	# TODO: Fill `ms` and `Cs` with the marginal means and covariances
+	m = m0
+	C = C0	
+	for i in 2:length(ts)
+		h = ts[i] - ts[i-1]
+		m, C = marginalize_gaussian(m, C, A(h), zeros(length(m)), Q(h))
+
+		push!(ms, m)
+		push!(Cs, C)
+	end
     
     return ms, Cs
 end
@@ -697,9 +740,13 @@ In Kalman filtering, this is also known as the "update" step.
 
 # ╔═╡ f80a5591-1387-40ee-8dad-c99c7df01fa0
 function condition_gaussian(m, P, A, b, C, y)
-    return missing, missing
-end
 
+	S = inv(A * P * A' + C)
+	ymean = m + P * A' * S * (y - (A * m + b))
+	ycov = P - P * A' * S * A * P
+	
+    return ymean, ycov
+end
 
 # ╔═╡ 226b69db-cb33-477b-acbe-7e29a7776806
 let
@@ -733,7 +780,7 @@ $(h2)
 end
 
 # ╔═╡ d7b02583-b3e4-44db-96e8-0d8373290c54
-m, C = missing, missing
+m, C = condition_gaussian(m0, C0, E0, zeros(d), zeros(d, d), y0)
 
 # ╔═╡ e6a691db-1ed0-4665-8f93-1593f170ee89
 let
@@ -783,7 +830,7 @@ $h
 end
 
 # ╔═╡ 3c511004-5e21-4975-88e1-a1e0b885225f
-mcond1, Ccond1 = missing, missing
+mcond1, Ccond1 = condition_gaussian(m, C, E1, zeros(d), zeros(d, d), f(y0, p, tspan[1]))
 
 # ╔═╡ 432f9128-f899-438e-98ff-a9406b2745d2
 (ismissing(mcond1) && ismissing(Ccond1)) ? missing : let
@@ -839,7 +886,9 @@ import ForwardDiff
 
 # ╔═╡ 62bad736-b3a0-4bfa-a55b-242bb7bc2d81
 function linearize(g, xi)
-    return missing, missing
+	G = ForwardDiff.jacobian(g, xi)
+	b = g(xi) - G * xi
+	return G, b
 end
 
 # ╔═╡ fe0f9312-83ca-4847-9384-5f51998769f8
@@ -909,7 +958,11 @@ Let's now perform approximate conditioning on a non-linear observation!
 m_before, C_before = [0.0], [1.0]
 
 # ╔═╡ a6f27549-1584-4fee-a503-ad0bef8dc7a7
-m_conditioned, C_conditioned = missing, missing
+begin
+	__A, __b = linearize(g, m_before)
+	__C = 1e-3*I(1)
+	m_conditioned, C_conditioned = condition_gaussian(m_before, C_before, __A, __b, __C, [0])
+end
 
 # ╔═╡ 7a475a2b-0e15-41d2-8fdf-4bfead53646c
 let
@@ -957,7 +1010,7 @@ md"""
 """
 
 # ╔═╡ 167a7221-452a-4b83-a9fb-950b6feba5bf
-h(Y) = missing
+h(Y) = E1*Y - f(E0*Y, p, nothing)
 
 # ╔═╡ 8a0b82ac-ec71-492e-91ca-6d4778bc8eeb
 md"""
@@ -970,7 +1023,10 @@ So, let's "condition on the ODE"!
 """
 
 # ╔═╡ 9ba6b83b-4c1f-482f-b98f-11239ee7a48c
-m0_conditioned, C0_conditioned = missing, missing
+m0_conditioned, C0_conditioned = let
+	A, b = linearize(h, m0)
+	condition_gaussian(m0, C0, A, b, zeros(d, d), zeros(d))
+end
 
 # ╔═╡ d271a1ff-5432-4503-9c02-9954d40989db
 let
@@ -993,10 +1049,13 @@ If we condition on the initial value first, and then on the ODE, we get a differ
 """
 
 # ╔═╡ 0eb1590f-b7a0-4e00-aa4b-6de05607baf5
-m0_conditioned_0, C0_conditioned_0 = missing, missing
+m0_conditioned_0, C0_conditioned_0 = condition_gaussian(m0, C0, E0, zeros(d), zeros(d, d), y0)
 
 # ╔═╡ 3d198b59-0654-4ade-a82c-c047f96a5788
-m0_conditioned_1, C0_conditioned_1 = missing, missing
+m0_conditioned_1, C0_conditioned_1 = let
+	A, b = linearize(h, m0_conditioned_0)
+	condition_gaussian(m0_conditioned_0, C0_conditioned_0, A, b, zeros(d, d), zeros(d))
+end
 
 # ╔═╡ 674b8281-3df7-43b2-b412-65c94e8d2aa7
 let
@@ -1083,6 +1142,7 @@ We use everything that we did above and put it together, to build the following 
 
 # ╔═╡ 04ac021b-1bcb-485d-aef7-a666f3c54b36
 function ode_filter(f, y0, ts, m0, C0, A, Q, E0, E1; p=p)	
+	D = d*(q+1)
 	
     # Output:
     ms = typeof(m0)[]
@@ -1091,8 +1151,25 @@ function ode_filter(f, y0, ts, m0, C0, A, Q, E0, E1; p=p)
 	m, C = m0, C0
 
 	# First condition on initial observations
+	m, C = condition_gaussian(m, C, E0, zeros(d), zeros(d,d), y0)
+	m, C = condition_gaussian(m, C, E1, zeros(d), zeros(d,d), f(y0, p, tspan[1]))
+		
+	push!(ms, m)
+	push!(Cs, C)
     
 	# Then iteratively compute the Gaussian state estimates for each time step
+	for i in 2:length(ts)
+		dt = ts[i] - ts[i-1]
+		
+		m, C = marginalize_gaussian(m, C, A(dt), zeros(D), Q(dt))
+
+		h(Y) = E1 * Y - f(E0 * Y, p, ts[i])
+		G, b = linearize(h, m)
+		m, C = condition_gaussian(m, C, G, b, zeros(d, d), zeros(d))
+		
+		push!(ms, m)
+		push!(Cs, C)
+	end
     
     return ms, Cs
 end
@@ -1227,7 +1304,16 @@ md"""
 
 # ╔═╡ 5f93f93a-f6df-4247-ab71-c8430e1b12ac
 function condition_gaussian_cal(m, P, A, b, C, y)
-    return missing, missing, missing
+
+	yhat = A * m + b
+	Sinv = inv(A * P * A' + C)
+	
+	ymean = m + P * A' * Sinv * (y - yhat)
+	ycov = P - P * A' * Sinv * A * P
+
+	sigma_sq_inc = (y-yhat)' * Sinv * (y-yhat)
+	
+    return ymean, ycov, sigma_sq_inc
 end
 
 # ╔═╡ b882cc9a-e52c-400b-84d3-aa77c83b559e
@@ -1256,6 +1342,8 @@ Let's implement a _calibrated_ ODE filter now!
 
 # ╔═╡ a98eb4ad-4606-4f38-874d-c559ad7dfef1
 function ode_filter_cal(f, y0, ts, m0, C0, A, Q, E0, E1; p=p)
+	D = length(m0)
+	
 	# Some magic that might be handy later
 	m0 = eltype(p).(m0)
 	C0 = eltype(p).(C0)
@@ -1266,12 +1354,36 @@ function ode_filter_cal(f, y0, ts, m0, C0, A, Q, E0, E1; p=p)
 
 	m, C = m0, C0
 
+    # Output:
+    ms = typeof(m0)[]
+	Cs = typeof(C0)[]
+
+	m, C = m0, C0
+
 	# First condition on initial observations
-	
+	m, C = condition_gaussian(m, C, E0, zeros(d), zeros(d,d), y0)
+	m, C, sigma_sq_acc = condition_gaussian_cal(m, C, E1, zeros(d), zeros(d,d), f(y0, p, tspan[1]))
+		
+	push!(ms, m)
+	push!(Cs, C)
+    
 	# Then iteratively compute the Gaussian state estimates for each time step
-	# But this time also compute the MLE for the diffusion parameter
+	for i in 2:length(ts)
+		dt = ts[i] - ts[i-1]
+		
+		m, C = marginalize_gaussian(m, C, A(dt), zeros(D), Q(dt))
+
+		h(Y) = E1 * Y - f(E0 * Y, p, ts[i])
+		G, b = linearize(h, m)
+		m, C, sigma_sq_inc = condition_gaussian_cal(m, C, G, b, zeros(d, d), zeros(d))
+		sigma_sq_acc += sigma_sq_inc
+		
+		push!(ms, m)
+		push!(Cs, C)
+	end
     
 	# And don't forget to re-scale the covariances with the MLE
+	Cs .*= sigma_sq_acc / d / length(ts)
 
     return ms, Cs
 end
@@ -1443,8 +1555,14 @@ import Distributions
 function nll(p)
     
     # TO IMPLEMENT
+	ms, Cs = ode_filter_cal(f, y0, ts2, m0, C0, A, Q, E0, E1; p=p)
+	final_y_mean = E0 * ms[end]
+	final_y_cov = E0 * Cs[end] * E0'
 
-    return missing
+	obs_mean = H * final_y_mean
+	obs_cov = H * final_y_cov * H' + 1e-10*I
+
+    return -Distributions.logpdf(Distributions.MvNormal(obs_mean, Symmetric(obs_cov)), data)
 end
 
 # ╔═╡ e3df901b-bf88-4031-a25c-e01739284085
@@ -1471,8 +1589,11 @@ There is only one thing left to do: Compute the maximum-likelihood estimate by m
 	The "Nelder-Mead" method should work reasonably well.
 """
 
+# ╔═╡ 3a663281-c595-4233-8304-fb3daa1e3667
+res = optimize(nll, p0, NelderMead())
+
 # ╔═╡ f975608b-7271-4139-874e-08506e8d6375
-p_opt = missing
+p_opt = res.minimizer
 
 # ╔═╡ 1f4cbb92-1478-4999-9d47-e56678e8eb7b
 p_opt, nll(p_opt)
@@ -3194,6 +3315,7 @@ version = "1.4.1+1"
 """
 
 # ╔═╡ Cell order:
+# ╟─dc3a7c1b-512c-49c4-a96d-838556e1d9c2
 # ╟─e58eea83-277b-40c7-ac9d-5f3300e59ffe
 # ╟─799233c0-97b9-4620-8356-16c41239a92b
 # ╟─0ad15284-e678-4341-8278-18e423b77034
@@ -3209,7 +3331,7 @@ version = "1.4.1+1"
 # ╠═eba65e7a-5b38-49bc-b81b-e878cc0d33bd
 # ╟─da6dcaf7-f8eb-4dc9-a1d4-79b1d86007e9
 # ╠═992e7173-f70e-41a1-9588-fb67b56a84fe
-# ╠═5544ded8-904e-4e88-8038-bc1e26035279
+# ╟─5544ded8-904e-4e88-8038-bc1e26035279
 # ╠═72430f2d-55d2-4c65-bc99-f808fb153451
 # ╠═e41d5a46-48ef-4891-87f9-b6909ebbdbe1
 # ╟─0c5021ff-7bef-4863-90c5-55a507451299
@@ -3253,7 +3375,7 @@ version = "1.4.1+1"
 # ╠═15dcaa60-bb28-489e-9c8d-7edb1f62d904
 # ╠═b014b770-422c-45b7-bfea-6f0c8cb744e7
 # ╠═e316d446-f64f-4edc-80b0-5be5ee656ece
-# ╠═a0440b5d-3b33-49b6-b132-dc1e8f02e66c
+# ╟─a0440b5d-3b33-49b6-b132-dc1e8f02e66c
 # ╟─8527e16e-8641-499a-bdf6-f3d87b0241b0
 # ╟─519d00c3-ed43-40e1-a360-e95214552ade
 # ╟─e8a99120-0e7f-43b4-bf9c-4e20b36ba291
@@ -3282,14 +3404,15 @@ version = "1.4.1+1"
 # ╠═1e9bb574-16ac-4ad9-aa7a-2c2cd5ae6b1b
 # ╠═8e6cec5d-6c5f-4011-a79f-964b21368972
 # ╟─73817e2a-ad4b-49c8-852c-3f75d76dbdcb
+# ╠═d403bef1-bce5-4cfc-8ac0-52996010ad2f
 # ╠═fbdf49b8-0d36-4d9d-8e13-e8fed2f86171
 # ╟─0331404c-b18d-4ea7-b948-9d7138c6d2f8
-# ╠═1168a27e-8c2f-49fb-9857-3dba65a3bf03
+# ╟─1168a27e-8c2f-49fb-9857-3dba65a3bf03
 # ╟─11356108-c1dd-49c5-81ab-706936c0adf4
-# ╠═ffc68588-f673-4382-94a1-8e4b212124a0
+# ╟─ffc68588-f673-4382-94a1-8e4b212124a0
 # ╟─9fa7ca21-c6cb-4de0-b3e4-c2e466fe0fb6
 # ╟─c2428a5f-4553-4e07-bc8c-0c9671bea8b0
-# ╠═5be999d6-70ec-40d7-9d33-37ca8bea155e
+# ╟─5be999d6-70ec-40d7-9d33-37ca8bea155e
 # ╟─cc1aa6b3-2c74-4e1e-90bd-f4c023d0a0c3
 # ╟─cc259a06-e028-4a42-a07c-acdd0cbabab4
 # ╠═4d7e17e4-4610-4ad1-8e2c-fad89dfa0e3c
@@ -3300,7 +3423,7 @@ version = "1.4.1+1"
 # ╠═34a79302-be2a-4d6b-a509-753fc45abbf1
 # ╟─55a6a562-1f81-442a-a049-fdea157d023b
 # ╟─46f5dc2f-dc36-44c5-b0b3-a8bb063f0283
-# ╠═69660525-2246-4a7a-9e3c-c99d1058f7a8
+# ╟─69660525-2246-4a7a-9e3c-c99d1058f7a8
 # ╟─9be29ad7-e1b1-4b4e-9b8a-5434b0ee21a8
 # ╟─783e96cb-ce53-493f-9dcc-51ab620fca7f
 # ╠═f80a5591-1387-40ee-8dad-c99c7df01fa0
@@ -3309,11 +3432,11 @@ version = "1.4.1+1"
 # ╠═d7b02583-b3e4-44db-96e8-0d8373290c54
 # ╟─e6a691db-1ed0-4665-8f93-1593f170ee89
 # ╟─e5da35ae-192a-4a38-ade1-6fe13f53ba07
-# ╠═906aee43-d874-409b-b52a-35f40701dd58
+# ╟─906aee43-d874-409b-b52a-35f40701dd58
 # ╟─dbda9377-2e05-44b4-bd50-ec90f2ebcb0d
 # ╟─e62c343e-616e-434b-af3d-c2d730c5bc5a
 # ╠═3c511004-5e21-4975-88e1-a1e0b885225f
-# ╠═432f9128-f899-438e-98ff-a9406b2745d2
+# ╟─432f9128-f899-438e-98ff-a9406b2745d2
 # ╟─36fe7a32-1f31-471b-8c26-1fac7aef860d
 # ╟─aee34cb8-f6c5-42fd-901e-a1f52c3567b1
 # ╟─c4e594b7-9d4d-4b4f-add3-707dc3848158
@@ -3355,10 +3478,10 @@ version = "1.4.1+1"
 # ╠═04ac021b-1bcb-485d-aef7-a666f3c54b36
 # ╟─f152c95a-6b69-4821-b522-8cc034d95200
 # ╟─61ba4734-a538-4e1d-b770-3b50c839a2be
-# ╠═779cdcfa-cadc-4986-bf8c-6e4d81e2c27d
+# ╟─779cdcfa-cadc-4986-bf8c-6e4d81e2c27d
 # ╟─ea5ed6a6-bc35-402d-b56d-4179d6a9d923
 # ╟─5ff96ed0-fbcf-4947-a878-cae942dc5550
-# ╠═e804d104-3811-46f2-b014-d5931ab61f23
+# ╟─e804d104-3811-46f2-b014-d5931ab61f23
 # ╟─4f2e6d01-8673-4b4e-a4c5-fe13c744e0f9
 # ╟─284cfdd1-6d25-47fb-ba5d-e0a563197ce3
 # ╟─9a815e39-65b8-4bd1-bb98-6e241f11f24d
@@ -3390,6 +3513,7 @@ version = "1.4.1+1"
 # ╟─656d511d-1f37-4288-a479-90112f84cc19
 # ╟─8f3d7317-f8af-4aa5-b9ab-67456d22156e
 # ╠═76706c29-fcec-4475-a766-fa32b0434a5c
+# ╠═3a663281-c595-4233-8304-fb3daa1e3667
 # ╠═f975608b-7271-4139-874e-08506e8d6375
 # ╠═1f4cbb92-1478-4999-9d47-e56678e8eb7b
 # ╟─81f18197-39f0-4c25-9e82-6d0071b99aee
